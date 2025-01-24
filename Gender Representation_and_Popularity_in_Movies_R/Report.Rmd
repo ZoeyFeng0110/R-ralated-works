@@ -1,0 +1,635 @@
+---
+title: 'Exploring Gender Representation and Popularity in Movies: Analyzing Bechdel
+  Test Scores and Genre Trends'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+date: "`r format (Sys.time(), '%d, %B, %Y')`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+```
+
+# Project Description
+
+This report aims to examine the relationship between gender representation in cinema and its impact on popularity, using the Bechdel Test as a key measure alongside genre-specific trends. By analyzing female-focused and non-female-focused movies, the study uncovers how gender dynamics influence audience reception and industry success over time. It highlights patterns such as the growing market potential of gender-inclusive storytelling and the significance of representation in shaping audience preferences. Through this exploration, the report offers valuable insights into the cultural and commercial implications of equitable narratives, providing a foundation for more inclusive and impactful storytelling in the film industry.
+
+# Data Introduction
+
+The movies.csv file is a comprehensive dataset that merges information from two primary sources: the Bechdel_detailed.csv, which provides movie Bechdel Test scores, and additional metadata fetched from The Movie Database API (TMDb). This integration enriches the dataset with supplementary attributes such as popularity, genres, cast details, and production information, enabling a more robust analysis of gender representation in films.
+
+Special thanks to Alison Yuhan Yao for her efforts in retrieving and combining data from the Bechdel Test Movie List website and TMDb, creating a resourceful dataset for studying trends in gender equality and their relationship to movie success metrics.
+
+## Data Processing
+
+### Cleaning
+
+For the key analysis of `genre`, `production_country`, and `production_company`, the data format has been processed. Specifically, square brackets (`[ ]`) were removed, and different `genres` were connected using commas (`,`) only, facilitating subsequent processing with the `separate` function.
+```{r}
+
+import_file <- function(file_path) {
+  data <- read_csv(file_path, show_col_types = FALSE) 
+  return(data)
+}
+movie_data <- import_file('/home/zoeyfeng/assignment/hw07-ZoeyFeng0110/movies.csv')
+
+new_movie_data_cleaned <- movie_data %>%
+  mutate(genres = gsub("\\[|\\]|'|\\s", "", genres),
+         production_companies = gsub("\\[|\\]|'|\\s", "", production_companies),
+         production_countries = gsub("\\[|\\]|'|\\s", "", production_countries))
+
+head(new_movie_data_cleaned)
+```
+
+### Category Definition
+
+A movie is determined to be "female-focused" by evaluating whether its bt_score equals 3 (meeting the Bechdel Test criteria: having at least two named female characters, who have conversations with each other about something other than men) and whether the percentage of women in the main cast exceeds 50%.
+
+**Female-focused Movies**
+
+```{r}
+female_focus_movies <- new_movie_data_cleaned %>%
+  filter(bt_score == 3 & cast_female_representation > mean(cast_female_representation, na.rm = TRUE))  %>%
+  select(-1)
+
+```
+
+**Non-female-focused Movies**
+
+```{r}
+
+non_female_focused_movies<- new_movie_data_cleaned %>%
+  filter(cast_female_representation < mean(cast_female_representation, na.rm = TRUE) & bt_score != 3)%>%
+  select(-1)
+
+```
+
+# Research Questions
+
+1. How do historical patterns of popularity growth for movies with varying gender representation and narrative diversity reveal key turning points in the film industry’s inclusivity efforts?
+
+2. What are the reasons behind the performance differences in genres such as animation and horror between female-focused and non-female-focused movies?
+
+3. How do Bechdel Test scores influence movie success, reflecting shifts in audience preferences and market strategies?
+
+4. How has movie popularity evolved with gender dynamics, particularly the rising significance of gender-inclusive narratives over time?
+
+
+# Data Alalysic
+
+## Comparison Popularity of Non-Female Focused Movies vs Female Focused Movies 
+
+The popularity of Non-Female-Focused Movies and Female-Focused Movies over the years was visualized to reveal trends in audience preferences.
+
+```{r}
+plot1 <- new_movie_data_cleaned %>%
+  filter(cast_female_representation < mean(cast_female_representation, na.rm = TRUE) & bt_score != 3) %>%
+  ggplot(aes(x = year, y = popularity)) +
+  geom_smooth(aes(color = "Non-Female Focused Movies"), se = FALSE) + # 全部数据的平滑曲线
+  geom_smooth(data = new_movie_data_cleaned %>% 
+                filter(cast_female_representation > mean(cast_female_representation, na.rm = TRUE) & bt_score == 3), 
+              aes(color = "Female Focused Movies"), se = FALSE) + # 过滤后的平滑曲线
+  labs(
+    title = "Comparison the Popularity of Non-Female Focused Movies vs Female Focused Movies",
+    x = "Year",
+    y = "Popularity") +
+  theme_minimal()
+plot1
+```
+
+### Overall Trends
+
+- **Non-Female Focused Movies (Blue-Green Curve):**
+
+  - The overall popularity is higher than that of female-focused movies, with the gap becoming more pronounced after 2000.
+  
+  - Before 1960, the growth in popularity was slow, but after 2000, it showed exponential growth.
+  
+- **Female-Focused Movies (Red Curve):**
+
+	- The popularity trend is similar to that of non-female-focused movies but slightly lower overall.
+	
+	- Significant growth is also observed after 2000, though it has not caught up with the growth rate of non-female-focused movies.
+	
+### Comparative Analysis
+
+- **Early Period (<1960):**
+
+  - The popularity of the two categories of movies is very close, with no significant difference.
+  
+  - This could be due to the general lack of attention to female representation in early movies, resulting in no substantial distinction in popularity between the two categories.
+  
+- **Mid Period (1960-2000):**
+
+  - The popularity of non-female-focused movies started to surpass that of female-focused movies, but the gap remained relatively small.
+
+  - This could be related to the mainstream movie genres (e.g., action, sci-fi) gradually targeting male audiences.
+  
+- **Modern Period (Post-2000):**
+
+  - The popularity of non-female-focused movies is significantly higher than that of female-focused movies, with a faster growth rate.
+
+  - This likely reflects the market's preference for high-budget, large-scale movie genres (e.g., action, superhero films), which are often not female-focused.
+  
+
+## The most common genres combinations in Female-focused movies
+
+Count the frequency of each type combination and sort the results in descending order to identify the most common combinations. Use a bar chart to display the top most common combinations for clear and intuitive analysis and reporting.
+
+```{r}
+movies_combinations <- female_focus_movies %>% 
+  group_by(genres) %>%
+  summarise(count = n()) %>% 
+  arrange(desc(count))
+
+
+ggplot(movies_combinations %>% top_n(10, count), 
+       aes(x = reorder(genres, count), 
+           y = count)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "female_focus_movies Most frequent Genres Combinations",
+    x = "Genres Combinations",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+genres_freunecy <- female_focus_movies %>%
+  separate_rows(genres, sep = ",") %>%
+  group_by(genres) %>%
+  summarise(
+    count = n()
+  ) %>%
+  arrange(desc(count)) %>%
+  top_n(5, count)
+
+# Circle Plot
+ggplot(genres_freunecy, aes(x = 2, y = count, fill = genres)) +
+  geom_bar(stat = "identity", width = 0.5) +
+  coord_polar(theta = "y") +
+  xlim(1, 2.5) +  # adjust the width
+  labs(
+    title = "Top 5 Genres by Frequency",
+    fill = "Genres"
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "right"
+  )
+```
+
+### Key Observations
+
+- Drama is the most common single genre:
+
+  - Its frequency far exceeds other genre combinations, indicating that drama movies dominate in female_focus_movies.
+  
+- Drama, Romance is the most common genre combination:
+
+  - The second-ranking Drama, Romance highlights that the combination of drama and romance is very prevalent in movies targeting female leads or audiences.
+
+### Relationship Between Movie Genres and Female Themes
+
+- Female-focused films lean towards emotional narratives:
+
+  - Movies with female themes tend to emphasize emotions and interpersonal relationships, making drama and romance more common genres.
+  
+- The blend of comedy and drama:
+
+  - The frequency of Comedy, Drama and Comedy, Romance suggests that lighthearted and humorous storytelling blends well with emotionally rich content in female-focused films.
+
+### Potential Implications of the Data
+
+- Production trends:
+
+  - Drama and romance films have high demand among female audiences, which could influence producers to favor these genres.
+  
+- Audience preferences:
+
+  - Female audiences may lean towards films with strong emotional connections (e.g., drama and romance), while lighthearted comedy elements also play a significant role.
+  
+- Limited diversity in genre combinations:
+
+  - The diversity in genre combinations is relatively low, with top combinations (e.g., Drama and Drama, Romance) dominating, indicating that female-focused films are still concentrated in certain specific directions.
+
+### Extended Analysis with Bechdel Test Context
+
+- Industry bias:
+
+  - Films with a **bt_score = 3** are predominantly found in drama, romance, and comedy genres, as these genres more easily meet the Bechdel Test requirements. This also reveals the challenges faced by other genres, such as science fiction, historical films, and war films, in passing the Bechdel Test. This trend may reflect a higher demand for diverse storytelling in female-focused films or an industry preference for narrative-driven, emotionally rich genres.
+
+
+## Comparison of Average Popularity by Genre
+
+In the dataset, **popularity** represents the overall popularity of a movie, based on a combination of user interactions and the movie's inherent attributes. It reflects both long-term trends (e.g., total vote count and release date) and short-term popularity surges (e.g., daily vote counts and viewership). This metric is crucial for analyzing changes in a movie's popularity and understanding user behavior patterns.  
+
+A bar chart visualization is used to compare the popularity of **female-focused-movies** and **non-female-focused-movies** by **genre**, focusing on the top 8 genres with the largest differences between the two datasets. Within a single dataset, the comparison highlights which genres are more **popular**. A cross-dataset comparison reveals significant differences in popularity across genres, indicating which types of movies receive higher ratings in **female-focused** versus **non-female-focused** categories.
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# cleaning and calculate
+genres_avg_stats1 <- non_female_focused_movies %>%
+  separate_rows(genres, sep = ",") %>%
+  filter(!is.na(genres) & genres != "") %>% 
+  filter(genres %in% c("Animation", "Adventure", "Family", "Horror", "War", "History", "TVMovie", "Romance")) %>%
+  group_by(genres) %>%
+  summarise(avg_popularity = mean(popularity, na.rm = TRUE)) %>% # calculate average
+  arrange(desc(avg_popularity)) %>% 
+  slice_max(avg_popularity, n = 20)
+
+genres_avg_stats2 <- female_focus_movies %>% 
+  separate_rows(genres, sep = ",") %>%
+  filter(!is.na(genres) & genres != "") %>%
+  filter(genres %in% c("Animation", "Adventure", "Family", "Horror", "War", "History", "TVMovie", "Romance")) %>%
+  group_by(genres) %>%
+  summarise(avg_popularity = mean(popularity, na.rm = TRUE)) %>% 
+  arrange(desc(avg_popularity)) %>% 
+  slice_max(avg_popularity, n = 20)
+
+combined_stats <- bind_rows(
+  genres_avg_stats1 %>% mutate(type = "Non-Female Focused"),
+  genres_avg_stats2 %>% mutate(type = "Female Focused")
+) 
+
+
+ggplot(combined_stats, aes(x = reorder(genres, avg_popularity), y = avg_popularity, fill = type)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  labs(
+    title = "Comparison of Average Popularity by Genre",
+    x = "Genres",
+    y = "Average Popularity",
+    fill = "Movie Type"
+  )
+```
+
+
+**Overall Trends**
+
+- **Female Focused Films' Outstanding Performance**:
+
+  Female Focused films have significantly higher average popularity than Non-Female Focused films in genres like Animation, Adventure, Family, Romance, and TVMovie.
+
+  This indicates that these genres likely cater more to family audiences, emotional resonance, and inclusive storytelling, appealing strongly to female viewers.
+
+- **Non-Female Focused Films' Strengths**:
+
+  Non-Female Focused films outperform Female Focused films in genres like History and War.
+
+  These genres are traditionally dominated by male-centric narratives and may lack sufficient female characters or perspectives.
+  
+### Comparative Analysis of Animation Genre Movies
+
+The popularity of Female Focused animation movies is generally slightly higher, with greater variability, especially in high-popularity films, which significantly outperform their Non-Female Focused counterparts. These differences may stem from the multidimensional appeal of Female Focused animations, particularly their market advantage through diversified narratives, strong female characters, and family-friendly themes.
+
+```{r}
+female_animation_data <- female_focus_movies %>%
+  separate_rows(genres, sep = ",") %>%
+  filter(genres == "Animation") %>%
+  select(title, popularity) %>%
+  mutate(type = "Female Focused")
+
+
+non_female_animation_data <- non_female_focused_movies %>%
+  separate_rows(genres, sep = ",") %>%
+  filter(genres == "Animation") %>%
+  select(title, popularity) %>%
+  mutate(type = "Non-Female Focused")
+
+# Combine datasets
+combined_data <- bind_rows(female_animation_data, non_female_animation_data)
+
+# boxplot
+ggplot(combined_data, aes(x = type, y = popularity, fill = type)) +
+  geom_boxplot(outlier.color = "red", outlier.shape = 16, outlier.size = 2) +
+  labs(
+    title = "Boxplot of Popularity in Animation Genre",
+    x = "Animation Movies",
+    y = "Popularity"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+
+The following presents the top 10 animated movies by popularity from the two datasets for further analysis.
+
+```{r}
+female_focused_animation_data <- female_focus_movies %>%
+  separate_rows(genres, sep = ",") %>%
+  filter(genres == "Animation") %>%
+  select(title,popularity) %>%
+  slice_max(popularity, n = 10)
+
+non_female_focused_animation_data <- non_female_focused_movies %>%
+  separate_rows(genres, sep = ",") %>%
+  filter(genres == "Animation") %>%
+  select(title,popularity) %>%
+  slice_max(popularity, n = 10)
+
+combined_data <- data.frame(
+  "Title" = female_focused_animation_data$title,
+  "Popularity" = female_focused_animation_data$popularity,
+  "Title" = non_female_focused_animation_data$title,
+  "Popularity" = non_female_focused_animation_data$popularity
+)
+
+# using KableExtra to refine visualization
+combined_data %>%
+  kbl(caption = "Comparison of Popularity in Animation Genre",
+      align = "c") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  add_header_above(c("Female Focused Animations" = 2, "Non-Female Focused Animations" = 2))
+
+
+```
+
+
+**Advantages of Female Focused Films: Emotion-Driven Narratives**  
+Female Focused animated films like *Frozen*, *Tangled*, and *The Little Mermaid* place female characters at the core, emphasizing themes of growth, friendship, love, and self-discovery. These emotion-driven narratives resonate universally, especially with family and female audiences. Additionally, *Your Name* stands out with its unique storytelling structure and emotional depth, which transcends traditional frameworks and appeals to a global audience, highlighting the potential of Female Focused narratives.
+
+**Characteristics of Non-Female Focused Films: Male-Dominated Narratives**  
+Data shows that highly popular Non-Female Focused animated films often center around combat and adventure themes, leveraging the strength of established franchises. Examples like *Dragon Ball Z*, *Yu-Gi-Oh!*, and *Saint Seiya* rely heavily on their massive fan bases to attract viewers quickly. However, these films tend to cater to niche audiences (primarily male viewers), limiting their appeal to broader demographics. While successful within their target audience, their overall market reach is comparatively narrower.
+
+
+### Horror Genre Movies Comparison Analysis
+
+The medians (represented by the black lines in the boxes) of the two types of horror movies are close, indicating that the core popularity performance is relatively similar overall. The box for Female Focused movies is slightly wider, suggesting greater variability in popularity, while the popularity of Non-Female Focused movies is more concentrated within a narrower range.
+
+```{r}
+
+non_female_horror_data <- non_female_focused_movies %>%
+  separate_rows(genres, sep = ",") %>%
+  filter(genres == "Horror") %>%
+  select(title, popularity) %>%
+  mutate(type = "Non-Female Focused")
+
+female_horror_data <- female_focus_movies %>%
+  separate_rows(genres, sep = ",") %>%
+  filter(genres == "Horror") %>%
+  select(title, popularity) %>%
+  mutate(type = "Female Focused")
+
+
+combined_data <- bind_rows(non_female_horror_data, female_horror_data)
+
+
+ ggplot(combined_data, aes(x = type, y = popularity, fill = type)) +
+   geom_boxplot(outlier.color = "red", outlier.shape = 16, outlier.size = 2) +
+   labs(
+     title = "Boxplot of Popularity in Horror Genre",
+     x = "Horror Movies",
+     y = "Popularity"
+   ) +
+   theme_minimal()
+
+```
+
+
+The following presents the top 10 horror movies by popularity from the two datasets for further analysis.
+
+```{r}
+horror_movie1 <- female_focus_movies %>%
+  separate_rows(genres, sep = ",") %>%
+  filter(genres == "Horror") %>%
+  select(title, popularity) %>%
+  arrange(desc(popularity)) %>%
+  top_n(10, popularity)
+
+horror_movie2 <- non_female_focused_movies %>%
+  separate_rows(genres, sep = ",") %>%
+  filter(genres == "Horror") %>%
+  select(title, popularity) %>%
+  arrange(desc(popularity)) %>%
+  top_n(10, popularity)
+
+combined_data <- data.frame(
+  "Title" = horror_movie1$title,
+  "Popularity" = horror_movie1$popularity,
+  "Title" = horror_movie2$title,
+  "Popularity" = horror_movie2$popularity
+)
+
+
+combined_data %>%
+  kbl(caption = "Comparison of Popularity in Animation Genre",
+      align = "c") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  add_header_above(c("Female Focused Animations" = 2, "Non-Female Focused Animations" = 2))
+
+```
+
+
+**Why Female Focused Horror Movies Achieve Higher Popularity**
+
+1. **Emphasis on Emotional Depth and Character Growth**  
+   - Female Focused horror movies combine terrifying elements with rich emotional dimensions, creating a more engaging and relatable experience for the audience. For example:  
+     - **Maternal instincts** drive the story in films like *The Conjuring*, highlighting a mother’s protective love for her family.  
+     - **Character growth and defiance** are central to movies like *It Follows*, where the female lead overcomes fear and danger through her own strength.  
+   - This blend of emotion and fear not only delivers the thrills but also fosters a deeper connection with the audience.
+
+2. **Breaking the “Victim” Stereotype**  
+   - Female Focused films redefine female roles by giving them more agency and complexity, breaking the traditional narrative where women are often portrayed as mere “victims.” For example:  
+     - In *The Conjuring*, women are not just helpers but experts directly confronting the source of terror.  
+     - *It Follows* centers around the protagonist’s active resistance and self-defense, challenging the passive damsel-in-distress trope.  
+   - This shift aligns with modern gender perspectives and adds depth to the characters, making them more compelling to the audience.
+
+3. **Unique Perspectives from Female Characters**  
+   - Female characters are better suited to exploring the complexities of psychological fear, bringing a nuanced narrative perspective to horror films. For example:  
+     - *It Follows* uses the protagonist’s perspective to symbolize societal fears and pressures, adding layers of meaning to the story.  
+     - *Train to Busan* elevates emotional tension by highlighting female characters’ sacrifices and protective instincts, creating a more impactful and heartfelt storyline.
+
+
+## Bechdel Test & Poplarity
+
+First calculated the overall performance of movies in the dataset in terms of passing the Bechdel Test. The analysis shows that **movies with the highest Bechdel Test score (bt_score = 3) account for the largest proportion**. This indicates that some filmmakers have begun to pay greater attention to diversity in gender representation and narrative depth. Particularly in the past decade, as gender equality issues have gained prominence, such movies have likely captured a larger share of the market. This trend reflects the gradual shift of the film industry toward greater inclusivity and diversity.
+
+```{r}
+
+movie_count_by_btscore <- new_movie_data_cleaned %>%
+  group_by(bt_score) %>%
+  summarise(count = n()) %>%
+  mutate(
+    description = case_when(
+      bt_score == 0 ~ "Failed the test :(",
+      bt_score == 1 ~ "It has to have at least two [named] women in it.",
+      bt_score == 2 ~ "Who talk to each other.",
+      bt_score == 3 ~ "About something besides a man."
+    )
+  ) 
+
+
+movie_count_by_btscore %>%
+  kbl(
+    caption = "Movie Count by Bechdel Test Score",
+    col.names = c("Bechdel Test Score", "Count", "Description"),
+    align = "c"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE
+  )
+```
+
+### The Relationship Between Bechdel Test Score, Year, and Popularity
+
+**Overall Trends**
+
+The overall popularity of movies shows a clear upward trend over time:
+
+- Movies across all Bechdel Test scores have demonstrated increasing popularity, particularly after the year 2000, where the upward trend becomes more pronounced for all scores. 
+
+- This growth is likely attributed to the overall expansion of the film industry, a broader market reach, and increased audience engagement.
+
+However, certain outliers in the data require further analysis to determine their impact and whether they should be excluded from the dataset for more accurate trend representation.
+
+
+```{r}
+
+bt_popularity_stats <- new_movie_data_cleaned %>%
+  filter(bt_score != 0) %>%
+  group_by(bt_score, year) %>% 
+  summarise(avg_popularity = mean(popularity, na.rm = TRUE)) %>% 
+  arrange(desc(avg_popularity)) 
+
+
+ggplot(bt_popularity_stats, aes(x = year, y = avg_popularity, color = factor(bt_score), group = factor(bt_score))) +
+  geom_point(size = 0.5) + 
+  geom_line(size = 0.5) + 
+  labs(
+    title = "Average Popularity by Bechdel Test Score Over Years",
+    x = "Year",
+    y = "Average Popularity",
+    color = "Bechdel Test Score"
+  ) +
+  theme_minimal()
+```
+
+### Outlier Analysis
+
+```{r}
+bt_popularity_stats
+```
+
+Outliers：
+
+- **1986**: Movies with a Bechdel Test score of 2 showed significantly higher popularity than similar movies from other years, creating a distinct outlier.
+- **2017**: Some movies with a score of 1 stood out with exceptionally high popularity during this year compared to others in the same category.
+- **2020**: Movies with a score of 2 displayed remarkably high popularity, though this outlier might be attributed to the dataset containing only a limited number of movies for this year.
+
+```{r}
+# Filter out those years with outliers
+general_extreme_data <- new_movie_data_cleaned %>%
+  filter(year == 1986 | year == 2017| year == 2020) %>%
+  select(title, year, popularity, bt_score) %>%# 
+  arrange(desc(popularity))
+general_extreme_data
+
+extreme_data1 <- general_extreme_data %>%
+  filter(year == 2020) %>%
+  select(year, title, bt_score)
+extreme_data1
+
+extreme_data2 <- general_extreme_data %>%
+  filter(year == 2017, bt_score == 1) %>%
+  select(year, title, popularity) %>%
+  arrange(desc(popularity))
+extreme_data2
+
+```
+
+
+**Interpretation of Outliers**
+
+1. **1986 (bt_score = 2)**  
+   - **Reason for Outlier**: The peak in 1986 was primarily driven by the immense popularity of the classic movie *Top Gun*. Despite scoring only 2 on the Bechdel Test, the film's strong visual appeal, star-studded cast, and cultural impact made it a box office sensation.
+
+2. **2017 (bt_score = 1)**  
+   - **Reason for Outlier**: The high popularity in 2017 was fueled by several major blockbusters, including *Pirates of the Caribbean: Dead Men Tell No Tales*, *Thor: Ragnarok*, and *John Wick: Chapter 2*. These action-adventure films featured female characters but primarily focused their narratives around male leads, resulting in a score of 1.  
+   - **Market Characteristics**: The success of these movies highlights the dominance of high-budget, well-branded IPs in the market. Even with limited diversity in gender narratives, effective commercial packaging and franchise appeal ensured widespread audience interest.
+
+3. **2020 (bt_score = 2)**  
+   - **Reason for Outlier**: The anomaly in 2020 can be attributed to the dataset containing only a single movie with a bt_score of 2 for that year. This reflects data limitations rather than any inherent market or narrative trends.
+
+## The Relationship Between Bechdel Test Score, Year, and Popularity (outliers cleaned) ##
+
+```{r}
+bt_popularity_stats <- new_movie_data_cleaned %>%
+  filter(bt_score != 0 & year != 1986 & year != 2020 ) %>%
+  group_by(bt_score, year) %>% #
+  summarise(avg_popularity = mean(popularity, na.rm = TRUE)) %>% 
+  arrange(desc(avg_popularity)) 
+
+
+a <- ggplot(bt_popularity_stats, aes(x = year, y = avg_popularity, color = factor(bt_score), group = factor(bt_score))) +
+  geom_point(size = 1) + 
+  geom_line(size = 0.5) + 
+  labs(
+    title = "Average Popularity by Bechdel Test Score Over Years",
+    x = "Year",
+    y = "Average Popularity",
+    color = "Bechdel Test Score"
+  ) +
+  theme_minimal()
+
+a
+```
+
+### Performance by Scores
+
+- **bt_score = 1 (Red Line)**:  
+Movies with a score of 1 exhibit significant variability in popularity, with marked differences across decades. This variability may result from the limited representation of women in these films, which hinders deeper storytelling. However, their popularity in certain years is often driven by their genre, star power, or effective marketing strategies.
+
+- **bt_score = 2 (Green Line)**:  
+Movies with a score of 2 show relatively stable popularity, with occasional small peaks. Their lower variability compared to score 1 suggests that their appeal among audiences depends more on the success of standout films in specific years than on consistent market strength.
+
+- **bt_score = 3 (Blue Line)**:  
+Movies with a score of 3 demonstrate a steadily rising trend in popularity, particularly after 2000, where their popularity often rivals or surpasses other score categories. This indicates that films with more complete gender narratives are increasingly becoming mainstream, likely due to their diversity and depth resonating more with modern audiences.
+
+### Historical and Market Trends
+
+- **Early Period (1920–1960)**:  
+Movies across all scores exhibit low popularity and minimal variability, likely reflecting the smaller film market and limited focus on gender narratives during this era.
+
+- **Mid Period (1960–2000)**:  
+Popularity begins to diverge among score categories, with score 1 and score 3 films showing steady improvements. This likely coincides with societal changes and the growing awareness of gender equality during this time.
+
+- **Modern Period (2000–Present)**:  
+Overall popularity grows rapidly, with score 3 movies displaying remarkable stability. The film industry’s increasing emphasis on gender diversity and equality contributes to the rising appeal of high-scoring movies.
+
+# Limitation
+
+1. **Dataset Coverage**:  
+   The dataset primarily focuses on movies with Bechdel Test scores and metadata from TMDb, which may not fully represent all genres, regions, or production contexts. This introduces potential selection bias.
+
+2. **Simplified Gender Metrics**:  
+   The reliance on Bechdel Test scores and cast female representation may oversimplify the complexities of gender dynamics, as they do not capture the depth of female characters or the nuance of gender-focused storytelling.
+
+3. **Temporal and Genre Bias**:  
+   Popularity scores may favor recent movies due to better data availability and cultural trends. Additionally, genres like war or history inherently face challenges in achieving higher Bechdel Test scores, complicating cross-genre comparisons.
+
+4. **Contextual Limitations**:  
+   The analysis does not consider factors like marketing budgets, star power, or audience demographics, which are critical to understanding popularity trends. It also identifies correlations but does not establish causation.
+
+5. **Visualization Tools and Learning Curve**:
+  Since some results required tabular representation, the analysis leveraged new visualization tools such as the kableExtra package. While it enhanced presentation quality, its use introduced a learning curve and potential errors due to unfamiliarity with the package.
